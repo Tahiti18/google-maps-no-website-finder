@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import scans
 from app.config import settings
-from app.db import engine, Base
+from app.db import Base
 from app.services.worker import get_worker
 
 # Configure logging
@@ -26,9 +26,18 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting application")
     
+    # Import db functions
+    from app.db import get_engine
+    
     # Create database tables
     logger.info("Creating database tables")
-    Base.metadata.create_all(bind=engine)
+    try:
+        engine = get_engine()
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create database tables: {e}")
+        # Don't crash on startup, migrations via Procfile should handle this
     
     # Start background worker
     logger.info("Starting background worker")
