@@ -1,19 +1,24 @@
 """Application configuration."""
 import os
+import sys
 from typing import Optional
 from pydantic_settings import BaseSettings
+
+# Print ALL environment variables for debugging
+print("=" * 80, file=sys.stderr)
+print("ENVIRONMENT VARIABLES:", file=sys.stderr)
+for key, value in os.environ.items():
+    if 'PG' in key or 'DATABASE' in key or 'POSTGRES' in key:
+        # Mask password
+        if 'PASSWORD' in key:
+            print(f"{key}=***MASKED***", file=sys.stderr)
+        else:
+            print(f"{key}={value}", file=sys.stderr)
+print("=" * 80, file=sys.stderr)
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
-    
-    # Database - can be full URL or individual components
-    DATABASE_URL: Optional[str] = None
-    PGHOST: Optional[str] = None
-    PGPORT: Optional[str] = None
-    PGUSER: Optional[str] = None
-    PGPASSWORD: Optional[str] = None
-    PGDATABASE: Optional[str] = None
     
     # Google API
     GOOGLE_MAPS_API_KEY: str = ""
@@ -23,44 +28,36 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     
     # API Settings
-    API_RATE_LIMIT_DELAY: float = 0.1  # Delay between API calls in seconds
-    
-    # Scanning Settings
-    MAX_RESULTS_PER_SEARCH: int = 60  # Google Places returns up to 60 results (3 pages of 20)
+    API_RATE_LIMIT_DELAY: float = 0.1
+    MAX_RESULTS_PER_SEARCH: int = 60
     
     class Config:
         env_file = ".env"
-        case_sensitive = True
+        case_sensitive = False  # Changed to False to be more flexible
     
-    def get_database_url(self) -> str:
-        """Get database URL, constructing from components if needed."""
-        import os
-        
-        # Try environment variable directly (Railway sets this)
-        db_url = os.environ.get('DATABASE_URL') or os.environ.get('DATABASE_PUBLIC_URL')
-        if db_url and db_url.strip() and not db_url.startswith('${{') and not db_url.startswith('"'):
-            # Clean up any quotes
-            db_url = db_url.strip('"').strip("'")
-            if db_url and not db_url.startswith('${{'):
-                return db_url
-        
-        # Try from self.DATABASE_URL
-        if self.DATABASE_URL and self.DATABASE_URL.strip():
-            url = self.DATABASE_URL.strip('"').strip("'")
-            if url and not url.startswith('${{'):
+    @property
+    def DATABASE_URL(self) -> str:
+        """Get database URL from environment."""
+        # Check all possible environment variable names Railway might use
+        for key in ['DATABASE_URL', 'DATABASE_PUBLIC_URL', 'POSTGRES_URL', 'POSTGRESQL_URL']:
+            url = os.environ.get(key)
+            if url:
+                print(f"Found database URL in {key}", file=sys.stderr)
                 return url
         
-        # Otherwise, construct from individual components
-        pghost = self.PGHOST or os.environ.get('PGHOST')
-        pgport = self.PGPORT or os.environ.get('PGPORT')
-        pguser = self.PGUSER or os.environ.get('PGUSER')
-        pgpassword = self.PGPASSWORD or os.environ.get('PGPASSWORD')
-        pgdatabase = self.PGDATABASE or os.environ.get('PGDATABASE')
+        # Try to construct from parts
+        pghost = os.environ.get('PGHOST')
+        pgport = os.environ.get('PGPORT', '5432')
+        pguser = os.environ.get('PGUSER', 'postgres')
+        pgpassword = os.environ.get('PGPASSWORD', '')
+        pgdatabase = os.environ.get('PGDATABASE', 'railway')
         
-        if all([pghost, pgport, pguser, pgpassword, pgdatabase]):
-            return f"postgresql://{pguser}:{pgpassword}@{pghost}:{pgport}/{pgdatabase}"
+        if pghost:
+            url = f"postgresql://{pguser}:{pgpassword}@{pghost}:{pgport}/{pgdatabase}"
+            print(f"Constructed URL from PG variables: postgresql://{pguser}:***@{pghost}:{pgport}/{pgdatabase}", file=sys.stderr)
+            return url
         
-        # Fallback to localhost (for local development only)
+        print("WARNING: No database configuration found, using localhost", file=sys.stderr)
         return "postgresql://postgres:postgres@localhost:5432/gmaps_finder"
 
 
