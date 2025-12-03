@@ -17,8 +17,9 @@ def get_engine():
     """Get or create database engine."""
     global _engine
     if _engine is None:
+        database_url = settings.get_database_url()
         _engine = create_engine(
-            settings.DATABASE_URL,
+            database_url,
             pool_pre_ping=True,
             echo=(settings.APP_ENV == "development")
         )
