@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Scan Details - No-Website Finder{% endblock %}
+
+{% block content %}
+<div class="scan-detail">
+    <div class="header-actions">
+        <a href="/" class="btn-secondary">← Back to Dashboard</a>
+        <button id="refreshBtn" class="btn-secondary">🔄 Refresh</button>
+    </div>
+    
+    <h2>Scan Details</h2>
+    
+    <div id="loading" class="loading">Loading scan details...</div>
+    
+    <div id="scanInfo" style="display: none;">
+        <div class="info-card">
+            <h3>Scan Information</h3>
+            <table class="info-table">
+                <tr><th>ID:</th><td id="scanId"></td></tr>
+                <tr><th>Status:</th><td id="scanStatus"></td></tr>
+                <tr><th>Created:</th><td id="scanCreated"></td></tr>
+                <tr><th>Updated:</th><td id="scanUpdated"></td></tr>
+                <tr><th>State:</th><td id="scanState"></td></tr>
+                <tr><th>Cities:</th><td id="scanCities"></td></tr>
+                <tr><th>Categories:</th><td id="scanCategories"></td></tr>
+                <tr><th>Filters:</th><td id="scanFilters"></td></tr>
+            </table>
+        </div>
+        
+        <div class="info-card">
+            <h3>Results Summary</h3>
+            <table class="info-table">
+                <tr><th>Total Processed:</th><td id="totalProcessed"></td></tr>
+                <tr><th>Without Website:</th><td id="totalWithout"></td></tr>
+                <tr><th>With Website:</th><td id="totalWith"></td></tr>
+            </table>
+        </div>
+        
+        <div id="errorCard" class="info-card error" style="display: none;">
+            <h3>Error</h3>
+            <p id="errorMessage"></p>
+        </div>
+        
+        <div class="export-actions">
+            <a id="downloadCsv" href="#" class="btn-primary" download>📥 Download CSV (No Website)</a>
+            <a id="downloadJson" href="#" class="btn-secondary" download>📥 Download JSON</a>
+        </div>
+        
+        <h3>Businesses Without Website (First 100)</h3>
+        
+        <div id="resultsLoading" class="loading">Loading results...</div>
+        
+        <table id="resultsTable" class="results-table" style="display: none;">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>City</th>
+                    <th>State</th>
+                    <th>Phone</th>
+                    <th>Rating</th>
+                    <th>Reviews</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="resultsBody">
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const scanId = '{{ scan_id }}';
+    
+    // Load on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        loadScanDetails();
+        loadResults();
+    });
+    
+    // Refresh button
+    document.getElementById('refreshBtn').addEventListener('click', () => {
+        loadScanDetails();
+        loadResults();
+    });
+    
+    // Auto-refresh if scan is running
+    let autoRefreshInterval = setInterval(() => {
+        const status = document.getElementById('scanStatus').textContent;
+        if (status === 'running' || status === 'queued') {
+            loadScanDetails();
+            loadResults();
+        }
+    }, 5000);
+    
+    async function loadScanDetails() {
+        try {
+            const response = await fetch(`/api/scans/${scanId}`);
+            if (!response.ok) throw new Error('Scan not found');
+            
+            const scan = await response.json();
+            
+            document.getElementById('scanId').textContent = scan.id;
+            document.getElementById('scanStatus').innerHTML = `<span class="status-${scan.status}">${scan.status}</span>`;
+            document.getElementById('scanCreated').textContent = new Date(scan.created_at).toLocaleString();
+            document.getElementById('scanUpdated').textContent = new Date(scan.updated_at).toLocaleString();
+            document.getElementById('scanState').textContent = scan.input_state;
+            document.getElementById('scanCities').textContent = scan.cities.join(', ');
+            document.getElementById('scanCategories').textContent = scan.input_categories.join(', ');
+            
+            const filters = [];
+            if (scan.min_rating) filters.push(`Min Rating: ${scan.min_rating}`);
+            if (scan.min_reviews) filters.push(`Min Reviews: ${scan.min_reviews}`);
+            document.getElementById('scanFilters').textContent = filters.length ? filters.join(', ') : 'None';
+            
+            document.getElementById('totalProcessed').textContent = scan.total_businesses_processed;
+            document.getElementById('totalWithout').textContent = scan.total_without_website;
+            document.getElementById('totalWith').textContent = scan.total_with_website;
+            
+            if (scan.error_message) {
+                document.getElementById('errorMessage').textContent = scan.error_message;
+                document.getElementById('errorCard').style.display = 'block';
+            }
+            
+            // Set download links
+            document.getElementById('downloadCsv').href = `/api/scans/${scanId}/results?format=csv`;
+            document.getElementById('downloadJson').href = `/api/scans/${scanId}/results?format=json`;
+            
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('scanInfo').style.display = 'block';
+        } catch (error) {
+            document.getElementById('loading').textContent = `Error: ${error.message}`;
+        }
+    }
+    
+    async function loadResults() {
+        try {
+            const response = await fetch(`/api/scans/${scanId}/results?format=json`);
+            const results = await response.json();
+            
+            const tbody = document.getElementById('resultsBody');
+            tbody.innerHTML = '';
+            
+            // Show first 100 results
+            const displayResults = results.slice(0, 100);
+            
+            displayResults.forEach(business => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${business.name}</td>
+                    <td>${business.city || 'N/A'}</td>
+                    <td>${business.state || 'N/A'}</td>
+                    <td>${business.phone || 'N/A'}</td>
+                    <td>${business.rating ? business.rating.toFixed(1) : 'N/A'}</td>
+                    <td>${business.user_ratings_total || 'N/A'}</td>
+                    <td><a href="${business.maps_url}" target="_blank" class="btn-small">View on Maps</a></td>
+                `;
+                tbody.appendChild(tr);
+            });
+            
+            if (results.length > 100) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td colspan="7" style="text-align: center; font-style: italic;">Showing first 100 of ${results.length} results. Download CSV/JSON for complete data.</td>`;
+                tbody.appendChild(tr);
+            }
+            
+            document.getElementById('resultsLoading').style.display = 'none';
+            document.getElementById('resultsTable').style.display = 'table';
+        } catch (error) {
+            document.getElementById('resultsLoading').textContent = `Error loading results: ${error.message}`;
+        }
+    }
+</script>
+{% endblock %}

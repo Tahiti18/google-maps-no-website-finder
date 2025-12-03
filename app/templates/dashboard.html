@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - No-Website Finder{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <h2>Create New Scan</h2>
+    
+    <form id="scanForm" class="scan-form">
+        <div class="form-group">
+            <label for="state">State (2-letter code):</label>
+            <input type="text" id="state" name="state" maxlength="2" placeholder="CA" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="cities">Cities (one per line):</label>
+            <textarea id="cities" name="cities" rows="4" placeholder="Los Angeles&#10;San Diego&#10;San Jose" required></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="categories">Business Categories (one per line):</label>
+            <textarea id="categories" name="categories" rows="4" placeholder="dentist&#10;plumber&#10;roofing contractor" required></textarea>
+        </div>
+        
+        <div class="form-row">
+            <div class="form-group">
+                <label for="minRating">Minimum Rating (optional):</label>
+                <input type="number" id="minRating" name="minRating" min="0" max="5" step="0.1" placeholder="3.5">
+            </div>
+            
+            <div class="form-group">
+                <label for="minReviews">Minimum Reviews (optional):</label>
+                <input type="number" id="minReviews" name="minReviews" min="0" placeholder="10">
+            </div>
+        </div>
+        
+        <button type="submit" class="btn-primary">Start Scan</button>
+    </form>
+    
+    <div id="message" class="message"></div>
+    
+    <h2>Recent Scans</h2>
+    
+    <div id="loading" class="loading">Loading scans...</div>
+    
+    <table id="scansTable" class="scans-table" style="display: none;">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Created</th>
+                <th>State</th>
+                <th>Cities</th>
+                <th>Categories</th>
+                <th>Status</th>
+                <th>Processed</th>
+                <th>No Website</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="scansBody">
+        </tbody>
+    </table>
+</div>
+
+<script>
+    // Load scans on page load
+    document.addEventListener('DOMContentLoaded', loadScans);
+    
+    // Auto-refresh every 10 seconds
+    setInterval(loadScans, 10000);
+    
+    // Handle form submission
+    document.getElementById('scanForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const state = document.getElementById('state').value.trim().toUpperCase();
+        const cities = document.getElementById('cities').value.split('\n').map(c => c.trim()).filter(c => c);
+        const categories = document.getElementById('categories').value.split('\n').map(c => c.trim()).filter(c => c);
+        const minRating = document.getElementById('minRating').value;
+        const minReviews = document.getElementById('minReviews').value;
+        
+        const data = {
+            state,
+            cities,
+            categories
+        };
+        
+        if (minRating) data.min_rating = parseFloat(minRating);
+        if (minReviews) data.min_reviews = parseInt(minReviews);
+        
+        try {
+            const response = await fetch('/api/scans', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+            
+            if (response.ok) {
+                const scan = await response.json();
+                showMessage(`Scan created successfully! ID: ${scan.id}`, 'success');
+                document.getElementById('scanForm').reset();
+                loadScans();
+            } else {
+                const error = await response.json();
+                showMessage(`Error: ${error.detail || 'Failed to create scan'}`, 'error');
+            }
+        } catch (error) {
+            showMessage(`Error: ${error.message}`, 'error');
+        }
+    });
+    
+    async function loadScans() {
+        try {
+            const response = await fetch('/api/scans?limit=20');
+            const scans = await response.json();
+            
+            const tbody = document.getElementById('scansBody');
+            tbody.innerHTML = '';
+            
+            scans.forEach(scan => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><a href="/scans/${scan.id}">${scan.id.substring(0, 8)}...</a></td>
+                    <td>${new Date(scan.created_at).toLocaleString()}</td>
+                    <td>${scan.input_state}</td>
+                    <td>${scan.cities_count}</td>
+                    <td>${scan.categories_count}</td>
+                    <td><span class="status-${scan.status}">${scan.status}</span></td>
+                    <td>${scan.total_businesses_processed}</td>
+                    <td>${scan.total_without_website}</td>
+                    <td>
+                        <a href="/scans/${scan.id}" class="btn-small">View</a>
+                        <a href="/api/scans/${scan.id}/results?format=csv" class="btn-small" download>CSV</a>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('scansTable').style.display = 'table';
+        } catch (error) {
+            document.getElementById('loading').textContent = 'Error loading scans';
+        }
+    }
+    
+    function showMessage(text, type) {
+        const messageEl = document.getElementById('message');
+        messageEl.textContent = text;
+        messageEl.className = `message ${type}`;
+        messageEl.style.display = 'block';
+        
+        setTimeout(() => {
+            messageEl.style.display = 'none';
+        }, 5000);
+    }
+</script>
+{% endblock %}
