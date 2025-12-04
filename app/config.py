@@ -7,9 +7,9 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
-    # Database - HARDCODED for Railway public proxy
+    # Database - HARDCODED for Railway public proxy with actual credentials
     # Using the public proxy domain from Railway Postgres settings
-    DATABASE_URL: str = "postgresql://postgres:postgres@ballast.proxy.rlwy.net:22302/railway"
+    DATABASE_URL: str = "postgresql://postgres:DDIvgvMooXBbAplakzgWQXsIyyVZDygB@ballast.proxy.rlwy.net:22302/railway"
     
     # Google API
     GOOGLE_MAPS_API_KEY: str = ""
