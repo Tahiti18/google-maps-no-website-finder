@@ -33,9 +33,12 @@ def get_session_local():
         _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
     return _SessionLocal
 
-# For backward compatibility
-engine = property(lambda self: get_engine())
-SessionLocal = property(lambda self: get_session_local())
+# For backward compatibility - these are callables, not properties
+def SessionLocal():
+    """Get database session - backward compatible."""
+    return get_session_local()()
+
+engine = get_engine()
 
 
 def get_db() -> Generator[Session, None, None]:
