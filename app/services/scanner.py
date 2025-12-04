@@ -109,6 +109,9 @@ class ScannerService:
                             # Create or update business
                             business = self._create_or_update_business(db, details, scan.id)
                             
+                            # CRITICAL: Flush to get business.id assigned
+                            db.flush()
+                            
                             # Create scan result
                             self._create_scan_result(db, scan.id, business.id, has_website)
                             
